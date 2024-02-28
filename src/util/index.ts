@@ -50,7 +50,7 @@ export async function getHistoryMessages({
     .map((msg) => {
       const isFromMe = msg.from === '555192194386@c.us';
       return `${
-        isFromMe ? 'mensagem marcus' : `mensagem ${msg.sender.shortName}`
+        isFromMe ? 'mensagem guilherme' : `mensagem ${msg.sender.shortName}`
       }: ${msg.body}`;
     });
   history = textMessages;

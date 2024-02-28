@@ -5,6 +5,7 @@ dotenv.config();
 let assistant: OpenAI.Beta.Assistants.Assistant;
 let thread: OpenAI.Beta.Threads.Thread;
 
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_KEY,
 });
@@ -12,43 +13,52 @@ const openai = new OpenAI({
 export async function initializeNewAIChatSession(): Promise<void> {
   assistant = await openai.beta.assistants.retrieve(
     process.env.OPENAI_ASSISTANT!
-  );
-  thread = await openai.beta.threads.create();
+    );
+    thread = await openai.beta.threads.create();
+  console.log(assistant.instructions)
 }
 
 export async function mainOpenAI({
   currentMessage,
-  history,
   name,
+  triggerName // Novo parâmetro para verificar o nome específico
 }: {
   currentMessage: string;
-  history: string[];
   name: string;
+  triggerName: string; // Novo parâmetro para verificar o nome específico
 }): Promise<string> {
-  const instructionsHistory = `Você está falando com ${name}. ${
-    history.length > 0
-      ? `Se a conversas já estiver em andamento continue ela, Aqui estão as últimas mensagens na conversa para você ter um contexto melhor: ${history.join(
-          ';'
-        )}`
-      : ''
-  }`;
-  const instructions = `${assistant.instructions} \n ${instructionsHistory}`;
+  // Verificar se a mensagem contém o nome específico
+  if (!currentMessage.toLowerCase().includes(triggerName.toLowerCase())) {
+    return 'Desculpe, você não está autorizado a chamar o GPT.';
+  }
 
-  await openai.beta.threads.messages.create(thread.id, {
+  const instructions = `${assistant.instructions}\nVocê está falando com ${name}.`;
+
+  // Criar um novo thread para cada interação
+  const newThread = await openai.beta.threads.create();
+
+  await openai.beta.threads.messages.create(newThread.id, {
     role: 'user',
     content: currentMessage,
   });
 
-  const run = await openai.beta.threads.runs.create(thread.id, {
+  const run = await openai.beta.threads.runs.create(newThread.id, {
     assistant_id: assistant.id,
     instructions,
   });
 
-  const messages = await checkRunStatus({ threadId: thread.id, runId: run.id });
-  const responseAI = messages.data[0]
-    .content[0] as OpenAI.Beta.Threads.Messages.MessageContentText;
+  // Aguardar até que o modelo forneça uma resposta
+  const messages = await checkRunStatus({
+    threadId: newThread.id,
+    runId: run.id,
+  });
+
+  // Extrair e retornar a primeira resposta do modelo
+  const responseAI = messages.data[0].content[0] as OpenAI.Beta.Threads.Messages.MessageContentText;
   return responseAI.text.value;
 }
+
+
 
 async function checkRunStatus({
   threadId,

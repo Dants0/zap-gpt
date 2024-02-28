@@ -23,7 +23,7 @@ venom
     },
     (statusSession, session) => {
       console.log('Status Session: ', statusSession);
-      console.log(session)
+      console.log(session);
     },
     { logQR: false }
   )
@@ -34,42 +34,53 @@ venom
     console.log(erro);
   });
 
+let pendingResponse: { [key: string]: boolean } = {};
+
 async function start(client: venom.Whatsapp): Promise<void> {
-  console.log(client)
   await initializeNewAIChatSession();
 
-  client.onMessage((message) => {
-    (async () => {
-      if (message.type === 'chat' && !message.isGroupMsg) {
-        await getHistoryMessages({
-          client,
-          history,
-          targetNumber: message.from,
-        });
-        
-        messageBuffer.push(message.body);
-        console.log(message.from)
+  client.onMessage(async (message) => {
+    // Verificar se a mensagem é de um chat pessoal ou de um grupo
+  
+    if (message.type === 'chat' || message.isGroupMsg) {
+      const targetNumber = message.isGroupMsg ? message.chatId : message.from;
 
-        clearTimeout(messageTimer);
-        messageTimer = setTimeout(() => {
-          (async () => {
-            const answer = await mainOpenAI({
-              currentMessage: messageBuffer.join(' \n '),
-              history,
-              name: message.sender.name,
-            });
-            const messages = splitMessages(answer);
-            const delay = 3000;
-            await sendMessagesWithDelay({
-              client,
-              delay,
-              messages,
-              targetNumber: message.from,
-            });
-            messageBuffer = [];
-          })();
-        }, 10000);
-      }
-    })();
+      await getHistoryMessages({
+        client,
+        history,
+        targetNumber,
+      });
+
+      messageBuffer.push(message.body);
+
+      clearTimeout(messageTimer);
+      messageTimer = setTimeout(async () => {
+        const prompt = messageBuffer.join('\n');
+
+        // Verificar se já há uma resposta pendente para este prompt
+        if (!pendingResponse[prompt]) {
+          pendingResponse[prompt] = true;
+
+          const answer = await mainOpenAI({
+            currentMessage: prompt,
+            name: message.sender.name,
+            triggerName: 'Juca: ',
+          });
+
+          delete pendingResponse[prompt]; // Remover a resposta pendente após obtê-la
+
+          const messages = splitMessages(answer);
+          const delay = 3000;
+          await sendMessagesWithDelay({
+            client,
+            delay,
+            messages,
+            targetNumber,
+          });
+        }
+
+        messageBuffer = [];
+      }, 10000);
+    }
   });
 }
